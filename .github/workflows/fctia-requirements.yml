@@ -1,0 +1,20 @@
+name: FCT.IA Office - Requisitos
+on:
+  push:
+    branches: ['develop/fctia-v0.1']
+    paths: ['fctia/**', '.github/workflows/fctia-requirements.yml']
+  pull_request:
+    paths: ['fctia/**', '.github/workflows/fctia-requirements.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  requirements:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validar baseline
+        run: python3 -m unittest discover -s fctia/tests -v
