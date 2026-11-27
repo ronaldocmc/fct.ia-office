@@ -1,0 +1,56 @@
+name: FCT.IA Office - Docker preflight
+on:
+  push:
+    branches: ['develop/fctia-v0.1']
+    paths: ['fctia/deploy/**', '.github/workflows/fctia-docker.yml', 'Dockerfile']
+  pull_request:
+    paths: ['fctia/deploy/**', '.github/workflows/fctia-docker.yml', 'Dockerfile']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      FCTIA_DB_PASSWORD: ci-only-not-a-real-secret
+      FCTIA_AUTH_SECRET: ci-only-auth-secret-not-for-deployment
+      FCTIA_SIGNING_SECRET: ci-only-signing-secret-not-for-deployment
+      FCTIA_PORT: '3100'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate compose and script
+        run: |
+          bash -n fctia/deploy/diagnose.sh
+          docker compose -f fctia/deploy/compose.yml config --format json > /tmp/fctia-compose.json
+          python3 - <<'PY'
+          import json
+          with open('/tmp/fctia-compose.json') as f:
+              c = json.load(f)
+          db, app = c['services']['db'], c['services']['server']
+          assert not db.get('ports')
+          assert app['ports'][0]['host_ip'] == '127.0.0.1'
+          assert app['environment']['PAPERCLIP_DEPLOYMENT_MODE'] == 'authenticated'
+          assert app['environment']['PAPERCLIP_DEPLOYMENT_EXPOSURE'] == 'private'
+          assert app['environment']['PAPERCLIP_TELEMETRY_DISABLED'] == '1'
+          for service in (db, app):
+              assert not service.get('privileged')
+              assert not service.get('network_mode') == 'host'
+              assert all(v.get('type') == 'volume' for v in service.get('volumes', []))
+          PY
+      - name: Start only isolated PostgreSQL
+        run: docker compose -p fctia-ci -f fctia/deploy/compose.yml up -d --wait db
+      - name: Verify PostgreSQL persistence and connectivity
+        run: |
+          docker compose -p fctia-ci -f fctia/deploy/compose.yml exec -T db psql -v ON_ERROR_STOP=1 -U fctia_office_app -d fctia_office -c "CREATE TABLE ci_probe (id integer PRIMARY KEY); INSERT INTO ci_probe VALUES (1);"
+          docker compose -p fctia-ci -f fctia/deploy/compose.yml restart db
+          for i in $(seq 1 30); do
+            if docker compose -p fctia-ci -f fctia/deploy/compose.yml exec -T db psql -U fctia_office_app -d fctia_office -Atc 'SELECT id FROM ci_probe' 2>/dev/null | grep -qx 1; then exit 0; fi
+            sleep 2
+          done
+          exit 1
+      - name: Clean up disposable CI resources
+        if: always()
+        run: docker compose -p fctia-ci -f fctia/deploy/compose.yml down -v
