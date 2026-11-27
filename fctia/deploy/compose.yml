@@ -1,0 +1,43 @@
+# Isolated experiment. Run from repository root with:
+# docker compose --project-name fctia-office --env-file /private/path/office.env -f fctia/deploy/compose.yml up -d --build
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: fctia_office_app
+      POSTGRES_PASSWORD: "${FCTIA_DB_PASSWORD:?required}"
+      POSTGRES_DB: fctia_office
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fctia_office_app -d fctia_office"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # No host port for the database.
+  server:
+    build:
+      context: ../..
+      dockerfile: Dockerfile
+    pids_limit: 2048
+    stop_grace_period: 90s
+    ports:
+      - "127.0.0.1:${FCTIA_PORT:-3100}:3100"
+    environment:
+      DATABASE_URL: "postgres://fctia_office_app:${FCTIA_DB_PASSWORD:?required}@db:5432/fctia_office"
+      PORT: "3100"
+      SERVE_UI: "true"
+      PAPERCLIP_DEPLOYMENT_MODE: authenticated
+      PAPERCLIP_DEPLOYMENT_EXPOSURE: private
+      PAPERCLIP_PUBLIC_URL: "http://localhost:${FCTIA_PORT:-3100}"
+      BETTER_AUTH_SECRET: "${FCTIA_AUTH_SECRET:?required}"
+      PAPERCLIP_TOOL_ACTION_SIGNING_SECRET: "${FCTIA_SIGNING_SECRET:?required}"
+      PAPERCLIP_TELEMETRY_DISABLED: "1"
+    volumes:
+      - office-data:/paperclip
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  pgdata:
+  office-data:
