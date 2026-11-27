@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "organization": {
+    "name": "FCT.IA Office Experimental",
+    "description": "Organização fictícia para homologação V0.1",
+    "syntheticDataOnly": true
+  },
+  "agents": [
+    {
+      "id": "coordenador",
+      "name": "Agente Coordenador",
+      "area": "Coordenação",
+      "reportsTo": null,
+      "mission": "Planejar e distribuir atividades; propor decisões para aprovação humana.",
+      "skills": [
+        "planejamento",
+        "delegacao",
+        "revisao"
+      ],
+      "runtime": null,
+      "automaticExecution": false,
+      "externalActions": false,
+      "approvalRequired": true
+    },
+    {
+      "id": "executivo",
+      "name": "Assistente Executivo",
+      "area": "Direção",
+      "reportsTo": "coordenador",
+      "mission": "Preparar agendas, briefings e minutas de comunicação, sem enviar mensagens.",
+      "skills": [
+        "agenda_simulada",
+        "briefing",
+        "minuta_email"
+      ],
+      "runtime": null,
+      "automaticExecution": false,
+      "externalActions": false,
+      "approvalRequired": true
+    },
+    {
+      "id": "documental",
+      "name": "Agente Documental",
+      "area": "Secretaria",
+      "reportsTo": "coordenador",
+      "mission": "Elaborar minutas de ofícios, atas e relatórios com dados fictícios.",
+      "skills": [
+        "minuta_oficio",
+        "minuta_ata",
+        "relatorio"
+      ],
+      "runtime": null,
+      "automaticExecution": false,
+      "externalActions": false,
+      "approvalRequired": true
+    },
+    {
+      "id": "operacional",
+      "name": "Agente Operacional",
+      "area": "Serviços",
+      "reportsTo": "coordenador",
+      "mission": "Classificar solicitações simuladas e propor ordens de serviço sem execução externa.",
+      "skills": [
+        "classificar_solicitacao",
+        "propor_ordem",
+        "acompanhar_prazo"
+      ],
+      "runtime": null,
+      "automaticExecution": false,
+      "externalActions": false,
+      "approvalRequired": true
+    }
+  ]
+}
