@@ -1,0 +1,54 @@
+name: FCT.IA Office - Paperclip smoke
+on:
+  push:
+    branches: ['develop/fctia-v0.1']
+    paths: ['.github/workflows/fctia-paperclip-smoke.yml']
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      FCTIA_PORT: '3100'
+      COMPOSE_PROJECT_NAME: fctia-smoke
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Generate disposable secrets
+        run: |
+          for key in FCTIA_DB_PASSWORD FCTIA_AUTH_SECRET FCTIA_SIGNING_SECRET; do
+            value=$(openssl rand -hex 32)
+            echo "::add-mask::$value"
+            printf '%s=%s\n' "$key" "$value" >> "$GITHUB_ENV"
+          done
+      - name: Build upstream Paperclip
+        run: docker compose -f fctia/deploy/compose.yml build server
+      - name: Start isolated stack
+        run: docker compose -f fctia/deploy/compose.yml up -d --no-build
+      - name: Verify readiness and HTTP interface
+        run: |
+          set -eu
+          ready=0
+          for i in $(seq 1 90); do
+            if curl --fail --silent --max-time 5 http://localhost:3100/api/ready >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 5
+          done
+          test "$ready" = 1
+          curl --fail --silent --max-time 15 http://localhost:3100/api/health >/dev/null
+          curl --fail --silent --max-time 15 http://localhost:3100/ -o /tmp/fctia-ui.html
+          grep -Eiq '<!doctype html|<html' /tmp/fctia-ui.html
+      - name: Check unauthenticated access to companies
+        run: |
+          code=$(curl --silent --max-time 15 -o /dev/null -w '%{http_code}' http://localhost:3100/api/companies)
+          case "$code" in 401|403) ;; *) echo "Expected 401 or 403, got $code"; exit 1;; esac
+      - name: Container status
+        if: always()
+        run: docker compose -f fctia/deploy/compose.yml ps
+      - name: Remove disposable resources
+        if: always()
+        run: docker compose -f fctia/deploy/compose.yml down -v
