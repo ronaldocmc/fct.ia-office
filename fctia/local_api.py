@@ -70,6 +70,22 @@ def handler_for(office, token, authority):
             origin=self.headers.get("Origin")
             if origin is not None and origin != "http://"+authority:
                 return self.reply(403,{"error":"Origem inválida"})
+            # Only fixed public UI assets, never arbitrary filesystem paths.
+            assets = {"/": ("index.html", "text/html; charset=utf-8"),
+                      "/office.css": ("office.css", "text/css; charset=utf-8"),
+                      "/office.js": ("office.js", "application/javascript; charset=utf-8")}
+            if self.command == "GET" and self.path in assets:
+                filename, mime = assets[self.path]
+                raw = (Path(__file__).resolve().parent / "web" / filename).read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", mime)
+                self.send_header("Content-Length", str(len(raw)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'")
+                self.end_headers()
+                self.wfile.write(raw)
+                return
             if not hmac.compare_digest(self.headers.get("Authorization",""),"Bearer "+token):
                 return self.reply(401,{"error":"Token local obrigatório"})
             try:
