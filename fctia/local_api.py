@@ -11,8 +11,8 @@ from .brain.store import Brain
 
 class Office:
     def __init__(self, brain_path=":memory:"):
-        self.engine = TaskEngine()
         self.brain = Brain(brain_path)
+        self.engine = TaskEngine(self.brain.db)
     def dispatch(self, method, path, data=None):
         url = urlsplit(path)
         parts = url.path.strip("/").split("/")
@@ -130,7 +130,7 @@ def handler_for(office, token, authority):
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument("--port",type=int,default=8765)
-    parser.add_argument("--brain",default=":memory:")
+    parser.add_argument("--brain",default=":memory:",help="Banco SQLite local para tarefas, eventos e conhecimento; padrão temporário")
     args=parser.parse_args()
     if not 1024<=args.port<=65535: parser.error("Porta inválida")
     token=secrets.token_urlsafe(32)
