@@ -28,6 +28,25 @@ class Office:
                 scope = q.get("scope",[""])[0]
                 if scope not in self.engine.profiles: raise ValueError("Escopo inválido")
                 return self.brain.search(scope,q.get("q",[""])[0])
+            if parts == ["api","brain","graph"]:
+                q = parse_qs(url.query)
+                scope = q.get("scope", [""])[0]
+                if scope not in self.engine.profiles:
+                    raise ValueError("Escopo inválido")
+                rows = self.brain.search(scope, q.get("q", [""])[0])
+                nodes = [{"id": "scope:"+scope, "kind": "scope", "label": self.engine.profiles[scope]["name"]}]
+                edges = []
+                sources = set()
+                for row in rows[:50]:
+                    kid = "knowledge:"+row["id"]
+                    sid = "source:"+row["source"]
+                    nodes.append({"id": kid, "kind": "knowledge", "label": row["content"][:100], "content": row["content"]})
+                    if sid not in sources:
+                        nodes.append({"id": sid, "kind": "source", "label": row["source"]})
+                        sources.add(sid)
+                    edges.extend([{"from": "scope:"+scope, "to": kid, "relation": "possui conhecimento"},
+                                  {"from": kid, "to": sid, "relation": "derivado de"}])
+                return {"nodes": nodes, "edges": edges, "total": len(rows), "truncated": len(rows)>50}
             if parts == ["api","brain","pending"]:
                 return [dict(r) for r in self.brain.db.execute("SELECT * FROM knowledge WHERE state='pending' ORDER BY created_at")]
         if method == "POST":
