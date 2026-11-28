@@ -1,0 +1,41 @@
+name: FCT.IA Office - Deploy UNESP (private)
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: 'Type DEPLOY-OFFICE to confirm authorized private deployment'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: fctia-office-unesp
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/develop/fctia-v0.1' && inputs.confirmation == 'DEPLOY-OFFICE'
+    environment: unesp-office
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Deploy exact reviewed revision through restricted SSH
+        shell: bash
+        env:
+          SSH_HOST: ia.fct.unesp.br
+          SSH_USER: ${{ secrets.OFFICE_SSH_USER }}
+          SSH_KEY: ${{ secrets.OFFICE_SSH_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.OFFICE_SSH_KNOWN_HOSTS }}
+          REVISION: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test -n "$SSH_USER" && test -n "$SSH_KEY" && test -n "$SSH_KNOWN_HOSTS"
+          [[ "$SSH_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          [[ "$REVISION" =~ ^[a-f0-9]{40}$ ]]
+          umask 077
+          dir="$(mktemp -d)"
+          trap 'rm -rf "$dir"' EXIT
+          printf '%s\n' "$SSH_KEY" > "$dir/key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$dir/known_hosts"
+          ssh -T -o BatchMode=yes -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$dir/known_hosts" -o GlobalKnownHostsFile=/dev/null \
+            -o ConnectTimeout=15 -i "$dir/key" "$SSH_USER@$SSH_HOST" "deploy-office $REVISION"
