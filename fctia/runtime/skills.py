@@ -27,10 +27,10 @@ def execute(skill, data):
     if skill == "minuta_oficio":
         body = "OFÍCIO EXPERIMENTAL\nDestinatário: "+required(data,"destinatario")+"\nAssunto: "+required(data,"assunto")+"\n"+required(data,"texto")
     elif skill == "briefing":
-        items = data.get("itens")
-        if not isinstance(items,list) or not all(isinstance(x,str) and len(x)<=1000 for x in items) or len(items)>50:
+        briefing_items = data.get("itens")
+        if not isinstance(briefing_items,list) or not all(isinstance(x,str) and len(x)<=1000 for x in briefing_items) or len(briefing_items)>50:
             raise ValueError("Lista de itens inválida")
-        body = "BRIEFING EXPERIMENTAL\n"+"\n".join("- "+x for x in items)
+        body = "BRIEFING EXPERIMENTAL\n"+"\n".join("- "+x for x in briefing_items)
     elif skill == "classificar_solicitacao":
         text = required(data,"descricao").casefold()
         categories = {"infraestrutura":("energia","elétrica","vazamento"),"tecnologia":("computador","rede","internet")}
