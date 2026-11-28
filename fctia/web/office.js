@@ -45,9 +45,47 @@ function renderGraph(parent,graph){
  for(const e of graph.edges){const a=positions.get(e.from),b=positions.get(e.to);if(a&&b)shape("line",{x1:a[0]+90,y1:a[1],x2:b[0]-90,y2:b[1],stroke:"#8294aa","stroke-width":1.5});}
  for(const n of graph.nodes){const [x,y]=positions.get(n.id);const color={scope:"#245c98",knowledge:"#247c70",source:"#52657b"}[n.kind];shape("rect",{x:x-90,y:y-25,width:180,height:50,rx:8,fill:color});shape("text",{x,y:y-5,"text-anchor":"middle",fill:"white","font-size":12},({scope:"Agente",knowledge:"Conhecimento",source:"Origem"})[n.kind]);const label=n.kind==="source"?n.label.slice(0,19):n.label.split("\n")[0].slice(0,24);shape("text",{x,y:y+13,"text-anchor":"middle",fill:"white","font-size":11},label);if(n.kind==="knowledge")button(labels,"Conhecimento "+(ks.indexOf(n)+1),async()=>{const edge=graph.edges.find(e=>e.from===n.id&&e.relation==="derivado de");const source=graph.nodes.find(x=>x.id===edge?.to);detail.textContent=n.content+"\n\nOrigem: "+(source?.label||"Não registrada");});}
 }
+const scenarios={
+ coordenador:[["planejamento","Planejar a semana de recepção acadêmica","Como organizar a recepção dos novos alunos?",{objetivo:"Semana fictícia de recepção",etapas:["Preparar programação","Consultar setores","Revisar cronograma"]},"Plano de atividades"],["delegacao","Distribuir preparação de pauta","Quem deve preparar a pauta?",{responsavel:"Assistente Executivo",atividade:"Preparar pauta da reunião fictícia"},"Proposta de delegação"],["revisao","Revisar minuta de relatório","Quais critérios verificar antes de aprovar?",{entregavel:"Relatório fictício de atividades",criterios:["Clareza","Completude","Coerência"]},"Checklist de revisão"]],
+ executivo:[["agenda_simulada","Organizar agenda da direção","Quais compromissos estão previstos?",{compromissos:["09h — Reunião fictícia de planejamento","14h — Reunião fictícia com coordenação"]},"Agenda organizada"],["briefing","Preparar briefing da direção","Quais assuntos devem ser apresentados à direção?",{itens:["Revisar cronograma fictício","Acompanhar solicitações pendentes"]},"Briefing consolidado"],["minuta_email","Preparar comunicação institucional","Como comunicar a reunião aos setores?",{destinatario:"Secretaria fictícia",assunto:"Reunião de planejamento",texto:"Solicitamos confirmação de participação na reunião fictícia."},"Minuta de e-mail"]],
+ documental:[["minuta_oficio","Elaborar ofício","Como formalizar uma solicitação de informações?",{destinatario:"Setor administrativo fictício",assunto:"Solicitação de informações",texto:"Solicitamos o envio do relatório experimental de atividades."},"Minuta de ofício"],["minuta_ata","Registrar reunião","Como organizar as deliberações?",{reuniao:"Reunião fictícia de coordenação",pautas:["Calendário acadêmico"],deliberacoes:["Propor revisão do calendário"]},"Minuta de ata"],["relatorio","Consolidar atividades","Como apresentar as atividades do período?",{titulo:"Relatório fictício mensal",observacoes:["Duas reuniões realizadas","Uma solicitação em análise"]},"Relatório preliminar"]],
+ operacional:[["classificar_solicitacao","Triar chamado de suporte","Qual setor deve avaliar a solicitação?",{descricao:"Computador fictício sem acesso à rede"},"Categoria sugerida"],["propor_ordem","Preparar ordem de serviço","Como encaminhar a solicitação de manutenção?",{descricao:"Reparo de iluminação em sala fictícia",setor:"Infraestrutura"},"Proposta de ordem de serviço"],["acompanhar_prazo","Verificar prazo de serviço","Qual é a situação do prazo?",{atividade:"Reparo fictício",prazo:"2027-01-03",referencia:"2027-01-01"},"Indicador de prazo"]]
+};
+let selectedAgent=null;
+async function renderOffice(){
+ el("p","Selecione um agente para consultar suas responsabilidades, tarefas, exemplos e evidências. Os estados abaixo refletem tarefas registradas, não a presença de um processo autônomo.",root);
+ const grid=el("div",undefined,root);grid.className="grid office-grid";
+ for(const p of profiles){
+  const own=tasks.filter(t=>t.agent===p.id), pending=own.filter(t=>t.state==="awaiting_review").length, assigned=own.filter(t=>t.state==="assigned").length;
+  const a=el("article",undefined,grid);a.className="office-room";
+  el("small",p.area,a);el("h3",p.name,a);
+  const desk=el("div","▣",a);desk.className="office-desk";desk.setAttribute("aria-hidden","true");
+  el("p",own.some(t=>t.state==="running")?"Em execução":pending?"Aguardando revisão":assigned?"Tarefas atribuídas":"Sem execução pendente",a);
+  el("small",own.length+" tarefas · "+p.skills.length+" skills",a);
+  button(a,"Abrir agente",async()=>{selectedAgent=p.id;await render();});
+ }
+ const p=profiles.find(x=>x.id===selectedAgent)||profiles[0];if(!p)return;
+ const panel=el("article",undefined,root);el("h3",p.name+" — painel",panel);el("p",p.mission,panel);
+ el("h4","Instância modelo — perguntas e capacidades",panel);
+ for(const [skill,title,question,payload,deliverable] of scenarios[p.id]||[]){
+  const a=el("article",undefined,panel);el("strong",title,a);el("p",question,a);el("small","Skill: "+skill+" · Resultado esperado: "+deliverable,a);
+  const input=field(a,"Dados fictícios do exemplo",JSON.stringify({synthetic:true,...payload},null,2),"textarea");input.rows=5;
+  button(a,"Criar tarefa deste exemplo",async()=>{const task=await api("/api/tasks",{title,skill,payload:JSON.parse(input.value)});view="tasks";await refresh();status.textContent="Tarefa criada: "+task.title+". Atribua e execute para gerar a evidência."});
+ }
+ el("h4","Tarefas, resultados e evidências",panel);
+ const own=tasks.filter(t=>t.agent===p.id);if(!own.length)el("p","Nenhuma tarefa atribuída a este agente.",panel);
+ for(const t of own)taskCard(t,panel);
+ const knowledge=await api("/api/brain?"+new URLSearchParams({scope:p.id}));
+ el("h4","Conhecimentos aprovados ("+knowledge.length+")",panel);
+ for(const k of knowledge){el("small",k.source,panel);el("pre",k.content,panel);}
+ const events=(await api("/api/events")).filter(e=>own.some(t=>t.id===e.task_id));
+ el("h4","Histórico de atividades",panel);
+ for(const e of events.slice(-10).reverse())el("p",e.at+" · "+e.action+" · "+e.actor,panel);
+}
 async function render(){
- root.replaceChildren();el("h2",({dashboard:"Visão geral",agents:"Organização e agentes",tasks:"Tarefas e skills",reviews:"Central de aprovações",brain:"Segundo Cérebro",events:"Auditoria"})[view],root);
+ root.replaceChildren();el("h2",({dashboard:"Visão geral",office:"Escritório virtual",agents:"Organização e agentes",tasks:"Tarefas e skills",reviews:"Central de aprovações",brain:"Segundo Cérebro",events:"Auditoria"})[view],root);
  if(view==="dashboard"){const g=el("div",undefined,root);g.className="grid";for(const [label,value] of [["Agentes",profiles.length],["Skills",profiles.reduce((n,p)=>n+p.skills.length,0)],["Tarefas",tasks.length],["Aguardando revisão",tasks.filter(t=>t.state==="awaiting_review").length]]){const a=el("article",undefined,g);el("p",label,a);el("div",String(value),a).className="metric";}el("p","Laboratório monousuário: execução manual, sem LLM e sem conexão com Paperclip.",root);}
+ if(view==="office")await renderOffice();
  if(view==="agents"){const g=el("div",undefined,root);g.className="grid";for(const p of profiles){const a=el("article",undefined,g);el("h3",p.name,a);el("small",p.area+" · "+(p.reportsTo?"Reporta a "+(profiles.find(x=>x.id===p.reportsTo)?.name||p.reportsTo):"Coordenação principal"),a);el("p",p.mission,a);const l=el("ul",undefined,a);for(const s of p.skills)el("li",s,l);}}
  if(view==="tasks"){const a=el("article",undefined,root);el("h3","Nova tarefa fictícia",a);const title=field(a,"Título","Tarefa experimental");const s=select(a,profiles.flatMap(p=>p.skills.map(k=>[k,p.name+" — "+k])));const p=field(a,"Parâmetros da skill (JSON)","","textarea");p.rows=8;const sample=()=>p.value=JSON.stringify({synthetic:true,...samples[s.value]},null,2);s.addEventListener("change",sample);sample();button(a,"Criar tarefa",async()=>{await api("/api/tasks",{title:title.value,skill:s.value,payload:JSON.parse(p.value)});await refresh();});for(const t of tasks)taskCard(t,root);}
  if(view==="reviews"){const pending=tasks.filter(t=>t.state==="awaiting_review");if(!pending.length)el("p","Nenhuma tarefa aguardando revisão.",root);for(const t of pending)taskCard(t,root);}
