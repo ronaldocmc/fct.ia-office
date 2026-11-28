@@ -9,14 +9,35 @@ from .skills import execute
 TEMPLATE = Path(__file__).resolve().parents[1] / "templates" / "organization-v01.json"
 
 class TaskEngine:
-    def __init__(self):
+    def __init__(self, db=None):
         self.profiles = {a["id"]: a for a in json.loads(TEMPLATE.read_text(encoding="utf-8"))["agents"]}
         self.tasks = {}
         self.events = []
+        self.db = db
+        if db is not None:
+            with db:
+                db.execute('CREATE TABLE IF NOT EXISTS office_tasks (id TEXT PRIMARY KEY, snapshot TEXT NOT NULL)')
+                db.execute('CREATE TABLE IF NOT EXISTS office_events (seq INTEGER PRIMARY KEY AUTOINCREMENT, event TEXT NOT NULL)')
+            self.tasks = {row[0]: json.loads(row[1]) for row in db.execute('SELECT id,snapshot FROM office_tasks ORDER BY rowid')}
+            self.events = [json.loads(row[0]) for row in db.execute('SELECT event FROM office_events ORDER BY seq')]
+            for task in self.tasks.values():
+                if task['state'] == 'running':
+                    task['state'] = 'failed'
+                    self._record(task, 'runtime-local', 'interrupted')
 
     def _record(self, task, actor, action):
-        self.events.append({"task_id": task["id"], "actor": actor, "action": action,
-                            "state": task["state"], "at": datetime.now(timezone.utc).isoformat()})
+        event = {"task_id": task["id"], "actor": actor, "action": action,
+                 "state": task["state"], "at": datetime.now(timezone.utc).isoformat()}
+        if action in ("approved", "revision_requested"):
+            event["review"] = deepcopy(task["review"])
+        if action == "draft_generated":
+            event["result"] = deepcopy(task["result"])
+        if self.db is not None:
+            with self.db:
+                self.db.execute("INSERT INTO office_tasks(id,snapshot) VALUES (?,?) ON CONFLICT(id) DO UPDATE SET snapshot=excluded.snapshot",
+                                (task["id"],json.dumps(task,ensure_ascii=False)))
+                self.db.execute("INSERT INTO office_events(event) VALUES (?)",(json.dumps(event,ensure_ascii=False),))
+        self.events.append(event)
 
     def create(self, title, skill, payload):
         if not isinstance(title, str) or not title.strip() or len(title) > 200:
